@@ -9,7 +9,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "https://screen-iq.onrender.com"],
     methods: ["GET", "POST"],
     credentials: true,
   })
