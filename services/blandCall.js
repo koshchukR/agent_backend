@@ -21,14 +21,14 @@ async function makePathwayCall({ phoneNumber, pathwayId, metadata = {} }) {
         pathway_id: pathwayId,
         pathway_version: 0,
         request_data: {
-          name: "Roman",
+          // name: "Roman",
         },
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.BLAND_AI_API}`,
           "Content-Type": "application/json",
-          encrypted_key: process.env.BLAND_ENCRYPTED_KEY, // remove it later
+          // encrypted_key: process.env.BLAND_ENCRYPTED_KEY, // remove it later
         },
       }
     );
