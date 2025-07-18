@@ -1,3 +1,6 @@
+const axios = require("axios");
+require("dotenv").config();
+
 async function makePathwayCall({
   phoneNumber,
   pathwayId,
@@ -5,6 +8,8 @@ async function makePathwayCall({
   requestData = {},
 }) {
   try {
+    console.log({ name: requestData.name, position: requestData.position });
+
     const response = await axios.post(
       "https://api.bland.ai/v1/calls",
       {
@@ -23,7 +28,7 @@ async function makePathwayCall({
         pathway_id: pathwayId,
         pathway_version: 0,
         from: `${process.env.BLAND_PHONE_FROM}`,
-        request_data: {},
+        request_data: requestData,
       },
       {
         headers: {
@@ -36,7 +41,7 @@ async function makePathwayCall({
     console.log("Pathway call initiated:", response.data);
     return response.data;
   } catch (error) {
-    console.log(requestData);
+    console.log("requestData:", requestData);
     console.error(
       "Error making pathway call:",
       error.response?.data || error.message
