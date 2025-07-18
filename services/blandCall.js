@@ -44,3 +44,7 @@ async function makePathwayCall({
     throw error;
   }
 }
+
+module.exports = {
+  makePathwayCall,
+};
