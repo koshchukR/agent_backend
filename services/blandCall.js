@@ -1,7 +1,9 @@
-const axios = require("axios");
-require("dotenv").config();
-
-async function makePathwayCall({ phoneNumber, pathwayId, metadata = {} }) {
+async function makePathwayCall({
+  phoneNumber,
+  pathwayId,
+  metadata = {},
+  requestData = {},
+}) {
   try {
     const response = await axios.post(
       "https://api.bland.ai/v1/calls",
@@ -21,15 +23,12 @@ async function makePathwayCall({ phoneNumber, pathwayId, metadata = {} }) {
         pathway_id: pathwayId,
         pathway_version: 0,
         from: `${process.env.BLAND_PHONE_FROM}`,
-        request_data: {
-          // name: "Roman",
-        },
+        request_data: requestData,
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.BLAND_AI_API}`,
           "Content-Type": "application/json",
-          // encrypted_key: process.env.BLAND_ENCRYPTED_KEY, // remove it later
         },
       }
     );
@@ -44,7 +43,3 @@ async function makePathwayCall({ phoneNumber, pathwayId, metadata = {} }) {
     throw error;
   }
 }
-
-module.exports = {
-  makePathwayCall,
-};

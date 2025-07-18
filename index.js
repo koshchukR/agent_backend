@@ -19,17 +19,27 @@ app.use(express.json());
 
 const port = process.env.PORT || 3000;
 
-app.get("/start-call", async (req, res) => {
+app.post("/start-call", async (req, res) => {
   try {
-    const phoneNumber = req.query.phone || "+380664374069";
-    const pathwayId = req.query.pathway || process.env.BLAND_PATHWAY_ID;
+    const { phone, name, position } = req.body;
+    const phoneNumber = phone || "+380664374069";
+    const pathwayId = process.env.BLAND_PATHWAY_ID;
 
     const metadata = {
       campaign_id: "cold_call_july_pathway",
       source: "manual-trigger",
     };
 
-    const result = await makePathwayCall({ phoneNumber, pathwayId, metadata });
+    const result = await makePathwayCall({
+      phoneNumber,
+      pathwayId,
+      metadata,
+      requestData: {
+        name,
+        position,
+      },
+    });
+
     res.status(200).json(result);
   } catch (error) {
     console.error("Error initiating call:", error.message);
