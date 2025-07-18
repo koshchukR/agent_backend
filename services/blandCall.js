@@ -23,7 +23,7 @@ async function makePathwayCall({
         pathway_id: pathwayId,
         pathway_version: 0,
         from: `${process.env.BLAND_PHONE_FROM}`,
-        request_data: requestData,
+        request_data: {},
       },
       {
         headers: {
@@ -36,6 +36,7 @@ async function makePathwayCall({
     console.log("Pathway call initiated:", response.data);
     return response.data;
   } catch (error) {
+    console.log(requestData);
     console.error(
       "Error making pathway call:",
       error.response?.data || error.message
