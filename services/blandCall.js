@@ -20,6 +20,7 @@ async function makePathwayCall({ phoneNumber, pathwayId, metadata = {} }) {
         metadata,
         pathway_id: pathwayId,
         pathway_version: 0,
+        from: `${process.env.BLAND_PHONE_FROM}`,
         request_data: {
           // name: "Roman",
         },
