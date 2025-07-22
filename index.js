@@ -1,4 +1,5 @@
 const express = require("express");
+const axios = require("axios");
 const cors = require("cors");
 require("dotenv").config();
 
@@ -61,6 +62,24 @@ app.post("/bland/webhook", async (req, res) => {
   }
 
   res.status(200).send("Webhook received");
+});
+
+app.get("/api/contacts", async (req, res) => {
+  try {
+    const response = await axios.get(
+      "https://api.hubapi.com/crm/v3/objects/contacts",
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    res.json(response.data);
+  } catch (err) {
+    console.error(err.response?.data || err.message);
+    res.status(500).json({ error: "Failed to fetch contacts from HubSpot" });
+  }
 });
 
 app.listen(port, () => {
