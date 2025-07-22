@@ -9,7 +9,11 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://screen-iq.onrender.com"],
+    origin: [
+      "http://localhost:5173",
+      "https://screen-iq.onrender.com",
+      "https://ai-powered-candidate-screening-plat.vercel.app",
+    ],
     methods: ["GET", "POST"],
     credentials: true,
   })
