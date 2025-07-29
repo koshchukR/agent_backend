@@ -13,9 +13,11 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.51.0",
     "axios": "^1.10.0",
+    "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
+    "twilio": "^5.8.0",
     "uuid": "^11.1.0"
   }
 }
