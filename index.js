@@ -150,7 +150,7 @@ app.post("/send-sms", async (req, res) => {
   }
 
   // Динамічний URL календаря
-  const calendarUrl = `https://ai-powered-candidate-screening-platform-d22vgavw2.vercel.app/calendar?candidate_id=${encodeURIComponent(
+  const calendarUrl = `https://ai-powered-candidate-screening-plat.vercel.app/calendar?candidate_id=${encodeURIComponent(
     candidate_id
   )}&user_id=${encodeURIComponent(user_id)}`;
 
