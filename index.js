@@ -140,15 +140,21 @@ app.post("/elevenlabs/call", async (req, res) => {
 });
 
 app.post("/send-sms", async (req, res) => {
-  const { name, phone, job_title } = req.body;
+  const { name, phone, job_title, candidate_id, user_id } = req.body;
 
-  if (!name || !phone || !job_title) {
-    return res
-      .status(400)
-      .json({ error: "Missing required fields: name, phone, job_title" });
+  if (!name || !phone || !job_title || !candidate_id || !user_id) {
+    return res.status(400).json({
+      error:
+        "Missing required fields: name, phone, job_title, candidate_id, user_id",
+    });
   }
 
-  const messageBody = `Hello, ${name}! You have applied for the position of “${job_title}”. Please select a convenient time for a call with our AI recruiter here: [add-link-to-calendar]`;
+  // Динамічний URL календаря
+  const calendarUrl = `https://screen-iq.onrender.com/calendar?candidate_id=${encodeURIComponent(
+    candidate_id
+  )}&user_id=${encodeURIComponent(user_id)}`;
+
+  const messageBody = `Hello, ${name}! You have applied for the position of “${job_title}”. Please select a convenient time for a call with our AI recruiter here: ${calendarUrl}`;
 
   try {
     const message = await twilioClient.messages.create({
