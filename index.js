@@ -150,7 +150,7 @@ app.post("/send-sms", async (req, res) => {
   }
 
   // Динамічний URL календаря
-  const calendarUrl = `https://screen-iq.onrender.com/calendar?candidate_id=${encodeURIComponent(
+  const calendarUrl = `ai-powered-candidate-screening-platform-d22vgavw2.vercel.app/calendar?candidate_id=${encodeURIComponent(
     candidate_id
   )}&user_id=${encodeURIComponent(user_id)}`;
 
