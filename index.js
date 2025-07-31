@@ -139,6 +139,32 @@ app.post("/elevenlabs/call", async (req, res) => {
   }
 });
 
+app.post("/send-sms", async (req, res) => {
+  const { name, phone, job_title } = req.body;
+
+  if (!name || !phone || !job_title) {
+    return res
+      .status(400)
+      .json({ error: "Missing required fields: name, phone, job_title" });
+  }
+
+  const messageBody = `Hello, ${name}! You have applied for the position of “${job_title}”. Please select a convenient time for a call with our AI recruiter here: [add-link-to-calendar]`;
+
+  try {
+    const message = await twilioClient.messages.create({
+      body: messageBody,
+      from: process.env.TWILIO_NUMBER,
+      to: phone.startsWith("+") ? phone : `+${phone}`,
+    });
+
+    console.log("SMS sent:", message.sid);
+    res.status(200).json({ success: true, sid: message.sid });
+  } catch (error) {
+    console.error("Twilio SMS error:", error);
+    res.status(500).json({ error: "Failed to send SMS" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
