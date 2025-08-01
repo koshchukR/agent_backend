@@ -171,6 +171,32 @@ app.post("/send-sms", async (req, res) => {
   }
 });
 
+app.post("/send-confirmation", async (req, res) => {
+  const { name, phone, job_title, datetime } = req.body;
+
+  if (!name || !phone || !job_title || !datetime) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  const messageBody = `Your call for the position “${job_title}” has been scheduled for ${datetime}. Thank you!`;
+
+  try {
+    const message = await twilioClient.messages.create({
+      body: messageBody,
+      from: process.env.TWILIO_NUMBER,
+      to: phone.startsWith("+") ? phone : `+${phone}`,
+    });
+
+    console.log("Confirmation SMS sent:", message.sid);
+    res.status(200).json({ success: true, sid: message.sid });
+  } catch (error) {
+    console.error("SMS error:", error?.message || error);
+    res
+      .status(500)
+      .json({ error: error?.message || "Failed to send confirmation SMS" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
