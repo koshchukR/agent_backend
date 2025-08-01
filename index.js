@@ -6,12 +6,18 @@ require("dotenv").config();
 
 const { makePathwayCall } = require("./services/blandCall");
 const { sendToSupabase } = require("./services/sendToSupabase");
+const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
+);
+
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
 );
 
 app.use(
@@ -149,7 +155,6 @@ app.post("/send-sms", async (req, res) => {
     });
   }
 
-  // Динамічний URL календаря
   const calendarUrl = `https://ai-powered-candidate-screening-plat.vercel.app/calendar?candidate_id=${encodeURIComponent(
     candidate_id
   )}&user_id=${encodeURIComponent(user_id)}`;
@@ -195,6 +200,59 @@ app.post("/send-confirmation", async (req, res) => {
       .status(500)
       .json({ error: error?.message || "Failed to send confirmation SMS" });
   }
+});
+
+// Secure calendar endpoints
+
+app.get("/calendar/candidate-info/:candidateId/:userId", async (req, res) => {
+  const { candidateId, userId } = req.params;
+
+  const { data: candidate, error } = await supabaseAdmin
+    .from("candidates")
+    .select("name, phone, position, user_id")
+    .eq("id", candidateId)
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !candidate) {
+    return res.status(404).json({ error: "Candidate not found" });
+  }
+
+  const { user_id, ...safeData } = candidate;
+  res.json(safeData);
+});
+
+app.get("/calendar/availability/:userId", async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from("candidate_screenings")
+    .select("datetime")
+    .eq("user_id", req.params.userId)
+    .eq("status", "scheduled")
+    .gte("datetime", new Date().toISOString());
+
+  res.json(data || []);
+});
+
+app.post("/calendar/create-booking", async (req, res) => {
+  const { candidate_id, user_id, datetime, status } = req.body;
+
+  const { data: candidate } = await supabaseAdmin
+    .from("candidates")
+    .select("user_id")
+    .eq("id", candidate_id)
+    .eq("user_id", user_id)
+    .single();
+
+  if (!candidate) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("candidate_screenings")
+    .insert([{ candidate_id, user_id, datetime, status }])
+    .select();
+
+  res.json(data[0]);
 });
 
 app.listen(port, () => {
