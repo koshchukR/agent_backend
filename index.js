@@ -255,6 +255,115 @@ app.post("/calendar/create-booking", async (req, res) => {
   res.json(data[0]);
 });
 
+// New: Booking Confirmation SMS Sender
+app.post("/calendar/send-booking-confirmation", async (req, res) => {
+  const { candidate_id, user_id, datetime } = req.body;
+
+  if (!candidate_id || !user_id || !datetime) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const { data: candidate, error } = await supabaseAdmin
+      .from("candidates")
+      .select("name, phone, position")
+      .eq("id", candidate_id)
+      .eq("user_id", user_id)
+      .single();
+
+    if (error || !candidate) {
+      return res.status(404).json({ error: "Candidate not found" });
+    }
+
+    const smsRes = await fetch(`${process.env.BACKEND_URL}/send-confirmation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: candidate.name,
+        phone: candidate.phone,
+        job_title: candidate.position,
+        datetime,
+      }),
+    });
+
+    const smsData = await smsRes.json();
+
+    if (!smsRes.ok) {
+      return res
+        .status(500)
+        .json({ error: smsData.error || "Failed to send SMS" });
+    }
+
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error("Booking confirmation error:", err.message);
+    res.status(500).json({ error: "Server error while sending confirmation" });
+  }
+});
+
+// New: Booking and Notify fallback (for RLS-blocked scenarios)
+app.post("/calendar/book-and-notify", async (req, res) => {
+  const { candidate_id, user_id, datetime } = req.body;
+
+  if (!candidate_id || !user_id || !datetime) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const { data: candidate, error: candidateError } = await supabaseAdmin
+      .from("candidates")
+      .select("name, phone, position")
+      .eq("id", candidate_id)
+      .eq("user_id", user_id)
+      .single();
+
+    if (candidateError || !candidate) {
+      return res.status(404).json({ error: "Candidate not found" });
+    }
+
+    const { error: insertError } = await supabaseAdmin
+      .from("candidate_screenings")
+      .insert([
+        {
+          candidate_id,
+          user_id,
+          datetime,
+          status: "scheduled",
+        },
+      ]);
+
+    if (insertError) {
+      return res.status(500).json({ error: "Failed to save booking" });
+    }
+
+    const smsRes = await fetch(`${process.env.BACKEND_URL}/send-confirmation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: candidate.name,
+        phone: candidate.phone,
+        job_title: candidate.position,
+        datetime,
+      }),
+    });
+
+    const smsData = await smsRes.json();
+
+    if (!smsRes.ok) {
+      return res
+        .status(500)
+        .json({ error: smsData.error || "Failed to send SMS" });
+    }
+
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error("Book & notify error:", err.message);
+    res
+      .status(500)
+      .json({ error: "Server error while booking and sending SMS" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
