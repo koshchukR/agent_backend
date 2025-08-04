@@ -266,11 +266,11 @@ app.post("/send-booking-sms", async (req, res) => {
   });
 
   try {
+    // Отримай дані кандидата без user_id (бо його немає у таблиці)
     const { data: candidate, error } = await supabaseAdmin
       .from("candidates")
       .select("name, phone, position")
       .eq("id", candidate_id)
-      .eq("user_id", user_id)
       .single();
 
     if (error || !candidate) {
@@ -283,6 +283,7 @@ app.post("/send-booking-sms", async (req, res) => {
       phone: candidate.phone,
     });
 
+    // Спроба знайти job title
     let jobTitle = candidate.position || "Position";
     try {
       const { data: jobData } = await supabaseAdmin
@@ -298,6 +299,7 @@ app.post("/send-booking-sms", async (req, res) => {
       console.log("No specific job assignment found, using position");
     }
 
+    // Форматування дати
     const [year, month, day] = selected_date.split("-").map(Number);
     const dateObj = new Date(year, month - 1, day);
     const formattedDate = dateObj.toLocaleDateString("en-US", {
@@ -308,6 +310,7 @@ app.post("/send-booking-sms", async (req, res) => {
     });
     const formattedDateTime = `${formattedDate} at ${selected_time}`;
 
+    // Підготовка payload для SMS
     const smsPayload = {
       name: candidate.name,
       phone: candidate.phone,
@@ -317,13 +320,12 @@ app.post("/send-booking-sms", async (req, res) => {
 
     console.log("Sending SMS with payload:", smsPayload);
 
+    // Виклик існуючого ендпоінту
     const smsResponse = await fetch(
-      `${process.env.BASE_URL || "http://localhost:3001"}/send-confirmation`,
+      `${process.env.BASE_URL || "http://localhost:3000"}/send-confirmation`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(smsPayload),
       }
     );
@@ -331,12 +333,13 @@ app.post("/send-booking-sms", async (req, res) => {
     const smsData = await smsResponse.json();
 
     if (smsResponse.ok) {
-      console.log("SMS sent successfully");
+      console.log("SMS sent successfully:", smsData);
       res.json({
         success: true,
         message: "SMS sent successfully",
         candidate_name: candidate.name,
         phone: candidate.phone,
+        sms_id: smsData.sid,
       });
     } else {
       console.error("SMS sending failed:", smsData);
@@ -347,7 +350,7 @@ app.post("/send-booking-sms", async (req, res) => {
     }
   } catch (error) {
     console.error("Error in send-booking-sms:", error);
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ error: "Server error", details: error.message });
   }
 });
 
