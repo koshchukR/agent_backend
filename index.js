@@ -162,7 +162,8 @@ app.post("/send-sms", async (req, res) => {
     candidate_id
   )}&user_id=${encodeURIComponent(user_id)}`;
 
-  const messageBody = `Hello, ${name}! You have applied for the position of “${job_title}”. Please select a convenient time for a call with our AI recruiter here: ${calendarUrl}`;
+  const messageBody = `Hi ${name}, you applied for ${job_title}. Pick a time for a call: ${calendarUrl}
+  `;
 
   try {
     const message = await twilioClient.messages.create({
