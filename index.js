@@ -26,6 +26,7 @@ app.use(
       "http://localhost:5173",
       "https://screen-iq.onrender.com",
       "https://ai-powered-candidate-screening-plat.vercel.app",
+      "https://agent-frontend-navy.vercel.app",
     ],
     methods: ["GET", "POST"],
     credentials: true,
@@ -155,7 +156,9 @@ app.post("/send-sms", async (req, res) => {
     });
   }
 
-  const calendarUrl = `https://ai-powered-candidate-screening-plat.vercel.app/calendar?candidate_id=${encodeURIComponent(
+  const calendarUrl = `${
+    process.env.FRONT_URL
+  }/calendar?candidate_id=${encodeURIComponent(
     candidate_id
   )}&user_id=${encodeURIComponent(user_id)}`;
 
