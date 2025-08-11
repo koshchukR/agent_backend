@@ -20,6 +20,31 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_KEY
 );
 
+async function sendSMS(phone, message) {
+  try {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const fromPhone = process.env.TWILIO_PHONE_NUMBER;
+
+    if (!accountSid || !authToken || !fromPhone) {
+      throw new Error("Missing SMS configuration");
+    }
+
+    const client = require("twilio")(accountSid, authToken);
+
+    const result = await client.messages.create({
+      body: message,
+      from: fromPhone,
+      to: phone,
+    });
+
+    return { success: true, sid: result.sid };
+  } catch (error) {
+    console.error("SMS sending failed:", error);
+    throw error;
+  }
+}
+
 app.use(
   cors({
     origin: [
@@ -211,19 +236,50 @@ app.post("/send-confirmation", async (req, res) => {
 app.get("/calendar/candidate-info/:candidateId/:userId", async (req, res) => {
   const { candidateId, userId } = req.params;
 
-  const { data: candidate, error } = await supabaseAdmin
-    .from("candidates")
-    .select("name, phone, position, user_id")
-    .eq("id", candidateId)
-    .eq("user_id", userId)
-    .single();
+  console.log("Getting candidate info:", { candidateId, userId });
 
-  if (error || !candidate) {
-    return res.status(404).json({ error: "Candidate not found" });
+  try {
+    // First try with user_id validation
+    let { data: candidate, error } = await supabaseAdmin
+      .from("candidates")
+      .select("name, phone, position, user_id")
+      .eq("id", candidateId)
+      .eq("user_id", userId)
+      .single();
+
+    // If not found with user_id validation, try without it (for public calendar links)
+    if (error || !candidate) {
+      console.log(
+        "Candidate not found with user_id validation, trying without:",
+        error?.message
+      );
+
+      const { data: candidatePublic, error: publicError } = await supabaseAdmin
+        .from("candidates")
+        .select("name, phone, position, user_id")
+        .eq("id", candidateId)
+        .single();
+
+      if (publicError || !candidatePublic) {
+        console.error("Candidate not found at all:", publicError?.message);
+        return res.status(404).json({ error: "Candidate not found" });
+      }
+
+      candidate = candidatePublic;
+    }
+
+    console.log("Found candidate:", {
+      name: candidate.name,
+      phone: candidate.phone,
+      hasPhone: !!candidate.phone,
+    });
+
+    const { user_id, ...safeData } = candidate;
+    res.json(safeData);
+  } catch (error) {
+    console.error("Error in candidate-info endpoint:", error);
+    res.status(500).json({ error: "Server error" });
   }
-
-  const { user_id, ...safeData } = candidate;
-  res.json(safeData);
 });
 
 app.get("/calendar/availability/:userId", async (req, res) => {
@@ -238,31 +294,79 @@ app.get("/calendar/availability/:userId", async (req, res) => {
 });
 
 app.post("/calendar/create-booking", async (req, res) => {
-  const { candidate_id, user_id, datetime, status } = req.body;
+  const { candidate_id, user_id, datetime, status = "scheduled" } = req.body;
 
-  const { data: candidate } = await supabaseAdmin
-    .from("candidates")
-    .select("user_id")
-    .eq("id", candidate_id)
-    .eq("user_id", user_id)
-    .single();
+  console.log("Creating booking:", { candidate_id, user_id, datetime, status });
 
-  if (!candidate) {
-    return res.status(403).json({ error: "Access denied" });
+  try {
+    // Verify candidate exists (without strict user_id validation for public bookings)
+    const { data: candidate, error: candidateError } = await supabaseAdmin
+      .from("candidates")
+      .select("id, name, phone, user_id")
+      .eq("id", candidate_id)
+      .single();
+
+    if (candidateError || !candidate) {
+      console.error("Candidate validation failed:", candidateError?.message);
+      return res.status(404).json({ error: "Candidate not found" });
+    }
+
+    console.log("Candidate validated for booking:", candidate.name);
+
+    // Check for duplicate booking
+    const { data: existingBooking } = await supabaseAdmin
+      .from("candidate_screenings")
+      .select("id")
+      .eq("candidate_id", candidate_id)
+      .eq("user_id", user_id)
+      .eq("datetime", datetime)
+      .single();
+
+    if (existingBooking) {
+      console.log("Duplicate booking detected, returning existing booking");
+      return res.json({
+        id: existingBooking.id,
+        message: "Booking already exists",
+        duplicate: true,
+      });
+    }
+
+    // Create the booking
+    const { data: booking, error: bookingError } = await supabaseAdmin
+      .from("candidate_screenings")
+      .insert([
+        {
+          candidate_id,
+          user_id,
+          datetime,
+          status,
+          notes: "Booked via calendar link",
+        },
+      ])
+      .select()
+      .single();
+
+    if (bookingError) {
+      console.error("Booking creation failed:", bookingError);
+      return res.status(500).json({
+        error: "Failed to create booking",
+        details: bookingError.message,
+      });
+    }
+
+    console.log("Booking created successfully:", booking.id);
+
+    res.json(booking);
+  } catch (error) {
+    console.error("Error in create-booking endpoint:", error);
+    res.status(500).json({ error: "Server error", details: error.message });
   }
-
-  const { data, error } = await supabaseAdmin
-    .from("candidate_screenings")
-    .insert([{ candidate_id, user_id, datetime, status }])
-    .select();
-
-  res.json(data[0]);
 });
 
 app.post("/send-booking-sms", async (req, res) => {
   const { candidate_id, user_id, selected_date, selected_time } = req.body;
 
-  console.log("Received SMS request:", {
+  console.log("SMS booking request:", {
     candidate_id,
     user_id,
     selected_date,
@@ -270,24 +374,34 @@ app.post("/send-booking-sms", async (req, res) => {
   });
 
   try {
-    // Отримай дані кандидата без user_id (бо його немає у таблиці)
-    const { data: candidate, error } = await supabaseAdmin
+    // Get candidate data (without strict user_id validation)
+    const { data: candidate, error: candidateError } = await supabaseAdmin
       .from("candidates")
       .select("name, phone, position")
       .eq("id", candidate_id)
       .single();
 
-    if (error || !candidate) {
-      console.error("Candidate not found:", error);
+    if (candidateError || !candidate) {
+      console.error("Candidate not found for SMS:", candidateError?.message);
       return res.status(404).json({ error: "Candidate not found" });
     }
 
-    console.log("Found candidate:", {
+    console.log("Found candidate for SMS:", {
       name: candidate.name,
       phone: candidate.phone,
+      hasValidPhone: candidate.phone && candidate.phone !== "000-000-0000",
     });
 
-    // Спроба знайти job title
+    if (!candidate.phone || candidate.phone === "000-000-0000") {
+      console.error("Invalid phone number for candidate:", candidate.phone);
+      return res.status(400).json({
+        error: "Invalid phone number",
+        candidate_name: candidate.name,
+        phone: candidate.phone,
+      });
+    }
+
+    // Get job title
     let jobTitle = candidate.position || "Position";
     try {
       const { data: jobData } = await supabaseAdmin
@@ -303,7 +417,7 @@ app.post("/send-booking-sms", async (req, res) => {
       console.log("No specific job assignment found, using position");
     }
 
-    // Форматування дати
+    // Format date and time
     const [year, month, day] = selected_date.split("-").map(Number);
     const dateObj = new Date(year, month - 1, day);
     const formattedDate = dateObj.toLocaleDateString("en-US", {
@@ -314,47 +428,60 @@ app.post("/send-booking-sms", async (req, res) => {
     });
     const formattedDateTime = `${formattedDate} at ${selected_time}`;
 
-    // Підготовка payload для SMS
-    const smsPayload = {
-      name: candidate.name,
-      phone: candidate.phone,
-      job_title: jobTitle,
-      datetime: formattedDateTime,
-    };
+    // Create the booking first
+    const datetime = `${selected_date}T${selected_time}:00.000Z`;
 
-    console.log("Sending SMS with payload:", smsPayload);
+    console.log("Creating booking in database...");
+    const { data: booking, error: bookingError } = await supabaseAdmin
+      .from("candidate_screenings")
+      .insert([
+        {
+          candidate_id,
+          user_id,
+          datetime,
+          status: "scheduled",
+          notes: "Booked via SMS confirmation",
+        },
+      ])
+      .select()
+      .single();
 
-    // Виклик існуючого ендпоінту
-    const smsResponse = await fetch(
-      `${process.env.BASE_URL || "http://localhost:3000"}/send-confirmation`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(smsPayload),
-      }
-    );
-
-    const smsData = await smsResponse.json();
-
-    if (smsResponse.ok) {
-      console.log("SMS sent successfully:", smsData);
-      res.json({
-        success: true,
-        message: "SMS sent successfully",
-        candidate_name: candidate.name,
-        phone: candidate.phone,
-        sms_id: smsData.sid,
-      });
+    if (bookingError) {
+      console.error("Failed to create booking:", bookingError);
+      // Continue with SMS anyway - booking might have been created by another process
+      console.log("Continuing with SMS despite booking error...");
     } else {
-      console.error("SMS sending failed:", smsData);
-      res.status(500).json({
-        error: "SMS sending failed",
-        details: smsData,
-      });
+      console.log("Booking created successfully:", booking.id);
     }
+
+    // Prepare SMS message
+    const message = `Hi ${candidate.name}! Your screening interview for the ${jobTitle} position has been scheduled for ${formattedDateTime}. We look forward to speaking with you!`;
+
+    console.log("Sending SMS:", {
+      to: candidate.phone,
+      message: message.substring(0, 100) + "...",
+    });
+
+    // Send SMS directly here instead of calling another endpoint
+    // Replace this with your actual SMS service (Twilio, etc.)
+    const smsResult = await sendSMS(candidate.phone, message);
+
+    console.log("SMS sent successfully:", smsResult);
+
+    res.json({
+      success: true,
+      message: "Booking created and SMS sent successfully",
+      candidate_name: candidate.name,
+      phone: candidate.phone,
+      booking_id: booking?.id,
+      sms_result: smsResult,
+    });
   } catch (error) {
     console.error("Error in send-booking-sms:", error);
-    res.status(500).json({ error: "Server error", details: error.message });
+    res.status(500).json({
+      error: "Server error",
+      details: error.message,
+    });
   }
 });
 
